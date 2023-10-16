@@ -23,8 +23,11 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 
@@ -32,6 +35,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_CAMERA_PERMISSION = 101;
     private static final int REQUEST_IMAGE_CAPTURE = 102;
+    private static final String TODO_FILE_NAME = "todo_items.txt";
 
     private ArrayList<TodoItem> items;
     private CustomArrayAdapter itemsAdapter;
@@ -50,12 +54,15 @@ public class MainActivity extends AppCompatActivity {
         buttonAddItem = findViewById(R.id.buttonAddItem);
         capturedImageView = findViewById(R.id.capturedImageView);
 
-        items = new ArrayList<>();
+        // Initialize the items list by loading items from a text file
+        items = loadItemsFromFile();
+
         itemsAdapter = new CustomArrayAdapter(this, R.layout.custom_list_item, items);
         listView.setAdapter(itemsAdapter);
 
         setUpListViewListener();
 
+        // Events
         buttonAddItem.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -65,12 +72,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setUpListViewListener() {
+
+        // Events
         listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 // Check for camera permission
                 if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                    // Permission is granted, open the camera
                     dispatchTakePictureIntent(position);
                 } else {
                     // Request camera permission
@@ -78,7 +86,27 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
+
+        listView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+            @Override
+            public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
+                deleteItem(position);
+                return true; // To consume the long click event
+            }
+        });
     }
+
+    private void deleteItem(int position) {
+        if (position >= 0 && position < items.size()) {
+            TodoItem deletedItem = items.remove(position);
+            itemsAdapter.notifyDataSetChanged();
+            saveItemsToFile(); // Save the updated list to the file after deletion
+
+            String deletedItemName = deletedItem.getItemName();
+            Toast.makeText(this, "Item '" + deletedItemName + "' deleted", Toast.LENGTH_SHORT).show();
+        }
+    }
+
 
     private void dispatchTakePictureIntent(int position) {
         Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
@@ -109,11 +137,11 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
-            // The photo was taken successfully
-            // You can handle the captured image here
             TodoItem todoItem = items.get(items.size() - 1);
             todoItem.setImagePath(currentPhotoPath);
             itemsAdapter.notifyDataSetChanged();
+            // After updating the item with the image path, save the updated list to the file
+            saveItemsToFile();
         }
     }
 
@@ -125,11 +153,47 @@ public class MainActivity extends AppCompatActivity {
             TodoItem newItem = new TodoItem(itemText, "");
             itemsAdapter.add(newItem);
             input.setText("");
+            // After adding an item, save the updated list to the file
+            saveItemsToFile();
         } else {
             Toast.makeText(getApplicationContext(), "Item has no name", Toast.LENGTH_LONG).show();
         }
     }
 
-    // Storing and managing items in a text file
+    private ArrayList<TodoItem> loadItemsFromFile() {
+        ArrayList<TodoItem> items = new ArrayList<>();
+        File file = new File(getFilesDir(), TODO_FILE_NAME);
 
+        if (file.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split(",");
+                    if (parts.length >= 2) {
+                        String itemName = parts[0];
+                        String imagePath = parts[1];
+                        items.add(new TodoItem(itemName, imagePath));
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return items;
+    }
+
+    private void saveItemsToFile() {
+        File file = new File(getFilesDir(), TODO_FILE_NAME);
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+            for (TodoItem item : items) {
+                String line = item.getItemName() + "," + item.getImagePath();
+                writer.write(line);
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 }
